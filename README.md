@@ -1,8 +1,5 @@
 # SAP B1 Customer Support Automation Workflow 🚀
 
-### Demo Video
-
-
 ![SAP B1 Workflow Demo](https://github.com/zeineb61romthana/SAP-B1-Customer-Support-Automation-Workflow/blob/main/ezgif.com-video-to-gif-converter.gif)
 
 
