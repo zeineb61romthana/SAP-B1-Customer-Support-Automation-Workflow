@@ -1,0 +1,1808 @@
+{
+  "name": "My workflow 7",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.classification.is_invoice_request }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dab2586e-ceef-4758-aa51-859b0b773eda",
+      "name": "IF - Check Invoice Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -5920,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://172.16.0.217:50000/b1s/v1/Login",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"CompanyDB\": \"GOTO_TEST\",\n  \"UserName\": \"manager\",\n  \"Password\": \"infor\"\n}",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "97547b3f-a200-47e6-a3e6-d84087c3d4cd",
+      "name": "SAP B1 - Login",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -5700,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced customer information extraction with session management\nconst emailData = $('Enhanced Gmail Trigger').item.json;\nconst sapSession = $('SAP B1 - Login').item.json;\nconst classification = $('Enhanced Email Classifier').item.json;\n\n// Store session creation time for timeout management\nconst sessionCreatedAt = new Date().toISOString();\nconst sessionTimeout = sapSession.SessionTimeout || 30; // 30 minutes default\n\n// Extract customer info with null safety\nconst customerInfo = {\n  email: emailData.from?.value?.[0]?.address?.toLowerCase().trim() || '',\n  name: emailData.from?.value?.[0]?.name?.trim() || '',\n  subject: emailData.subject || '',\n  body: emailData.text || '',\n  display_name: emailData.from?.value?.[0]?.name || 'Unknown'\n};\n\n// Clean email address (remove extra characters)\nif (customerInfo.email) {\n  customerInfo.email = customerInfo.email.replace(/[<>]/g, '');\n}\n\n// Extract potential customer codes from email body\nconst customerCodePattern = /(?:customer|client|bp|partner)[\\s#:]*([A-Z0-9]{3,10})/i;\nconst codeMatch = customerInfo.body.match(customerCodePattern);\nconst potentialCustomerCode = codeMatch ? codeMatch[1] : null;\n\nreturn [{\n  json: {\n    customer_info: customerInfo,\n    potential_customer_code: potentialCustomerCode,\n    sap_session: {\n      ...sapSession,\n      created_at: sessionCreatedAt,\n      timeout_minutes: sessionTimeout,\n      expires_at: new Date(Date.now() + (sessionTimeout * 60 * 1000)).toISOString()\n    },\n    classification: classification,\n    sap_credentials: {\n      base_url: 'https://172.16.0.217:50000/b1s/v1',\n      company_db: 'GOTO_TEST',\n      username: 'manager',\n      password: 'infor'\n    }\n  }\n}];"
+      },
+      "id": "21640911-b866-4ddb-b3e4-1021334b90a7",
+      "name": "Function - Prepare Customer Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5480,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if SAP B1 session is still valid (within 30-minute timeout)\nconst sessionData = $json.sap_session;\nconst now = new Date();\nconst sessionCreated = new Date(sessionData.created_at);\nconst sessionTimeout = sessionData.timeout_minutes || 30;\nconst minutesElapsed = (now - sessionCreated) / (1000 * 60);\n\n// If session is expired or close to expiring (within 2 minutes), need to refresh\nconst needsRefresh = minutesElapsed >= (sessionTimeout - 2);\n\nreturn [{\n  json: {\n    ...{$json},\n    session_check: {\n      needs_refresh: needsRefresh,\n      minutes_elapsed: minutesElapsed,\n      minutes_remaining: sessionTimeout - minutesElapsed,\n      session_valid: !needsRefresh\n    }\n  }\n}];"
+      },
+      "id": "635f8414-095f-4001-b564-042d74649b27",
+      "name": "Function - Check Session Validity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5260,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.session_check.needs_refresh }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "42cf6f14-4f99-46c4-b3cb-37b3fedeae89",
+      "name": "IF - Need Session Refresh",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -5040,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://172.16.0.217:50000/b1s/v1/Login",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"CompanyDB\": \"GOTO_TEST\",\n  \"UserName\": \"manager\",\n  \"Password\": \"infor\"\n}",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "eb233237-4c4b-42fa-a3d8-855e122e9791",
+      "name": "SAP B1 - Refresh Login",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4840,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update session data after refresh\nconst originalData = $('Function - Check Session Validity').item.json;\nconst newSession = $json;\n\n// Update with new session info\nconst sessionCreatedAt = new Date().toISOString();\nconst sessionTimeout = newSession.SessionTimeout || 30;\n\nreturn [{\n  json: {\n    ...originalData,\n    sap_session: {\n      ...newSession,\n      created_at: sessionCreatedAt,\n      timeout_minutes: sessionTimeout,\n      expires_at: new Date(Date.now() + (sessionTimeout * 60 * 1000)).toISOString()\n    },\n    session_check: {\n      needs_refresh: false,\n      minutes_elapsed: 0,\n      minutes_remaining: sessionTimeout,\n      session_valid: true,\n      refreshed: true\n    }\n  }\n}];"
+      },
+      "id": "6b06ceef-8ef2-4590-a5d9-fba59a273a1e",
+      "name": "Function - Update Session Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4620,
+        420
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "820b72d7-43ad-4e5c-81e1-a2b91e703efa",
+      "name": "Merge Session Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -4380,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.$json.sap_credentials.base_url }}/BusinessPartners?$filter=contains(EmailAddress,'{{ $json.$json.customer_info.email }}')",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "=B1SESSION={{ $json[\"$json\"].sap_session.body.SessionId }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "5666b73d-aaff-4d72-9bdd-93f99ae94598",
+      "name": "SAP B1 - Search Business Partners",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4160,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced debugging for customer matching\nconst customerMatchResult = $json;\nconst originalData = $('Merge Session Data').first().json;\nconst businessPartnersData = $('SAP B1 - Search Business Partners').first().json;\n\n// ADD COMPREHENSIVE DEBUG LOGGING\nconsole.log(\"=== DETAILED DEBUG INFO ===\");\nconsole.log(\"Sender Email from originalData:\", originalData.$json.customer_info.email);\nconsole.log(\"Business Partners Response:\", JSON.stringify(businessPartnersData, null, 2));\n\n// Check if we have business partners data\nif (businessPartnersData.value && businessPartnersData.value.length > 0) {\n  console.log(\"Number of Business Partners found:\", businessPartnersData.value.length);\n  \n  // Check each business partner for email match\n  businessPartnersData.value.forEach((partner, index) => {\n    console.log(`Partner ${index + 1}:`);\n    console.log(`  CardCode: ${partner.CardCode}`);\n    console.log(`  CardName: ${partner.CardName}`);\n    console.log(`  EmailAddress: ${partner.EmailAddress}`);\n    console.log(`  Email Match: ${partner.EmailAddress === originalData.$json.customer_info.email}`);\n  });\n} else {\n  console.log(\"No business partners found in response\");\n}\n\nconsole.log(\"AI Customer Match Result:\", JSON.stringify(customerMatchResult, null, 2));\nconsole.log(\"Customer matched?\", customerMatchResult.matched);\nconsole.log(\"Customer code:\", customerMatchResult.customer_code);\nconsole.log(\"Match confidence:\", customerMatchResult.confidence);\nconsole.log(\"Match reasoning:\", customerMatchResult.reasoning);\n\n// If no match found, let's do a manual check\nif (!customerMatchResult.matched && businessPartnersData.value) {\n  const manualMatch = businessPartnersData.value.find(partner => \n    partner.EmailAddress && partner.EmailAddress.toLowerCase().trim() === \n    originalData.$json.customer_info.email.toLowerCase().trim()\n  );\n  \n  if (manualMatch) {\n    console.log(\"MANUAL MATCH FOUND - AI failed to detect it!\");\n    console.log(\"Manual match result:\", {\n      CardCode: manualMatch.CardCode,\n      CardName: manualMatch.CardName,\n      EmailAddress: manualMatch.EmailAddress\n    });\n    \n    // Override the AI result with manual match\n    return [{\n      json: {\n        ...originalData,\n        customer_match: {\n          matched: true,\n          confidence: 100,\n          customer_code: manualMatch.CardCode,\n          customer_name: manualMatch.CardName,\n          customer_email: manualMatch.EmailAddress,\n          reasoning: \"Manual fallback match by email address\",\n          ai_failed: true,\n          original_ai_result: customerMatchResult\n        }\n      }\n    }];\n  }\n}\n\nreturn [{\n  json: {\n    ...originalData,\n    customer_match: customerMatchResult\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3720,
+        500
+      ],
+      "id": "5c483b84-2ca5-45a3-92cb-601a1e5f3b77",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.customer_match.matched }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9cfc3f3d-be69-4927-8032-3db0f943e362",
+      "name": "IF - Customer Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -3500,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://172.16.0.217:50000/b1s/v1/Orders?$filter=DocNum eq {{ $json.order_number }} and CardCode eq '{{ $json.customer_match.customer_code }}'",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "=B1SESSION={{ $json.$json.sap_session.body.SessionId }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "3685f5a2-fc1f-4134-8dcf-00859017616a",
+      "name": "SAP B1 - Get Specific Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2400,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://172.16.0.217:50000/b1s/v1/Login",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"CompanyDB\": \"GOTO_TEST\",\n  \"UserName\": \"manager\",\n  \"Password\": \"infor\"\n}",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "d993e627-16d3-44b1-ba12-7c1b02091f9b",
+      "name": "SAP B1 - Refresh Login1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2620,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://172.16.0.217:50000/b1s/v1/Orders?$filter=CardCode eq '{{ $('IF - Customer Found').item.json.customer_match.customer_code }}'&$orderby=DocDate desc&$top=1&$select=DocEntry,DocNum,CardCode,CardName,DocDate,DocTotal,DocumentStatus",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "=B1SESSION={{ $json.body.SessionId }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "e11fee4a-25c6-4cee-9e28-9d32c520d760",
+      "name": "Get Latest Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2400,
+        560
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4f0840d1-2ffd-4e6e-82a0-356b58852615",
+      "name": "Merge Orders",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -2180,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "85cf3c8a-00b2-4c1d-88f7-c133142f472f",
+              "leftValue": "={{ $json.value && $json.value.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1960,
+        460
+      ],
+      "id": "e6352150-ecd4-4b5c-a731-811cf0842c46",
+      "name": "IF - Orders Found"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://172.16.0.217:50000/b1s/v1/Login",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"CompanyDB\": \"GOTO_TEST\",\n  \"UserName\": \"manager\",\n  \"Password\": \"infor\"\n}",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "eaeda155-f57c-4d5f-ae59-9198336b50c9",
+      "name": "SAP B1 - Refresh Login2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1660,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.matchingInvoices }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5e0dfc4d-a7e2-4a0b-beff-7270d174bcc1",
+      "name": "IF - Check Invoice Available",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Order Data:\n{{ JSON.stringify($('Merge Orders').item.json, null, 2) }}\n\nInvoice Data:\n{{ JSON.stringify($json, null, 2) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a document processing expert. Based on the SAP invoice data, determine the best approach for document generation:\n\n1. If invoice exists and is complete: generate PDF report\n2. If order exists but no invoice: create new invoice first\n3. If partial data: determine what additional information is needed\n\nReturn JSON: {\n  \"action\": \"generate_pdf|create_invoice|need_more_data\",\n  \"document_type\": \"invoice|order|quote\",\n  \"document_id\": \"SAP_DocEntry\",\n  \"next_steps\": [\"step1\", \"step2\"],\n  \"reasoning\": \"explanation\"\n}"
+            },
+            {
+              "type": "HumanMessagePromptTemplate",
+              "message": "Order Data:\\n{{ JSON.stringify($('Merge Orders').item.json, null, 2) }}\\n\\nInvoice Data:\\n{{ JSON.stringify($json, null, 2) }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        620,
+        560
+      ],
+      "id": "f4caf0a7-50c1-48bd-965d-7649493782e6",
+      "name": "AI Document Strategy"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "create_invoice",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a99d79de-f610-42e4-a137-fc41c8211f97",
+      "name": "IF - Need to Create Invoice",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.sap_credentials.base_url }}/Invoices",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "=B1SESSION={{ $json.sap_session.SessionId }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"CardCode\": \"{{ $json.customer_match.customer_code }}\",\n  \"BaseType\": 17,\n  \"BaseEntry\": {{ $json.order_data.DocEntry }},\n  \"Comments\": \"Auto-generated from email request\"\n}",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "25798fec-7227-4205-b5ad-596866d5ec0f",
+      "name": "SAP B1 - Create Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dynamic Crystal Report generation with multiple formats\nconst documentData = $json;\nconst strategy = $('AI Document Strategy').first().json;\nconst orderData = $('Merge Orders').first().json;\nconst customerData = $('AI Customer Matching').first().json;\n\n// Determine report parameters based on AI strategy\nlet reportConfig = {\n  template: 'invoice_template.rpt',\n  format: 'PDF',\n  parameters: {}\n};\n\nif (strategy.document_type === 'invoice') {\n  reportConfig.template = 'invoice_template.rpt';\n  reportConfig.parameters = {\n    DocEntry: documentData.DocEntry || documentData.value?.[0]?.DocEntry,\n    CompanyDB: 'GOTO_TEST',\n    CardCode: customerData.customer_code\n  };\n} else if (strategy.document_type === 'order') {\n  reportConfig.template = 'order_confirmation.rpt';\n  reportConfig.parameters = {\n    DocEntry: orderData.value?.[0]?.DocEntry,\n    CompanyDB: 'GOTO_TEST',\n    CardCode: customerData.customer_code\n  };\n}\n\n// For this example, we'll simulate Crystal Reports\n// In production, you'd call your Crystal Reports API here\nconst timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15);\nconst docId = reportConfig.parameters.DocEntry;\nconst reportPath = `https://your-reports-server.com/reports/${strategy.document_type}_${docId}_${timestamp}.pdf`;\n\n// Simulate report generation delay\nconsole.log(`Generating ${strategy.document_type} report for DocEntry: ${docId}`);\n\nreturn [{\n  json: {\n    status: 'success',\n    report_type: strategy.document_type,\n    document_id: docId,\n    report_path: reportPath,\n    generated_at: new Date().toISOString(),\n    config: reportConfig,\n    customer_info: customerData,\n    order_info: orderData\n  }\n}];"
+      },
+      "id": "b284520c-8cbd-491e-8912-939c5995e482",
+      "name": "Function - Generate Dynamic Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Customer: {{ $json.customer_info.customer_name }} ({{ $json.customer_info.customer_code }})\nEmail: {{ $json.customer_info.customer_email }}\nDocument: {{ $json.report_type }} #{{ $json.document_id }}\nOriginal Request Subject: {{ $('Enhanced Gmail Trigger').item.json.subject }}\nReport Path: {{ $json.report_path }}\nGenerated At: {{ $json.generated_at }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an email composer expert. Create a professional, personalized email response based on:\n1. Customer information\n2. Document type (invoice/order)\n3. Original request context\n4. Company tone and branding\n\nReturn JSON: {\n  \"subject\": \"email subject\",\n  \"body_html\": \"HTML email body\",\n  \"body_text\": \"plain text version\",\n  \"attachments\": [\"file paths\"],\n  \"priority\": \"normal|high|low\"\n}"
+            },
+            {
+              "type": "HumanMessagePromptTemplate",
+              "message": "Customer: {{ $json.customer_match.customer_name }} ({{ $json.customer_match.customer_code }})\\nDocument: {{ $json.report_type }} #{{ $json.document_id }}\\nOriginal Request: {{ $json.customer_info.subject }}\\nReport Path: {{ $json.report_path }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        1800,
+        560
+      ],
+      "id": "a6f83976-59a1-4756-b65d-bc8326abc67f",
+      "name": "AI Email Composer"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.customer_info.email }}",
+        "subject": "={{ $json.email_content.subject }}",
+        "message": "={{ $json.email_content.body_html }}",
+        "options": {
+          "replyToSenderOnly": true
+        }
+      },
+      "id": "117164f9-8d1a-4cc4-b9c4-4ad1a8852dfe",
+      "name": "Gmail - Send Dynamic Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        2180,
+        560
+      ],
+      "webhookId": "47de7fb5-bde4-4bc1-b4e8-aacf6eef22fd",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iPYFJjrZDd2OtZU9",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Subject: {{ $json.subject }}\nFrom: {{ $json.from }}\nBody: {{ $json.text }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an intelligent email classifier and information extractor. Analyze this email and determine:\n\n1. Is this an invoice/document request?\n2. Extract any order numbers, dates, or specific requirements  \n3. Determine the urgency and type of request\n4. Identify any special instructions\n\nIMPORTANT: Return ONLY valid JSON without any formatting, newlines, or explanations. Use this exact structure:\n\n{\"is_invoice_request\": true, \"order_number\": \"number or null\", \"request_type\": \"specific_order\", \"urgency\": \"normal\", \"special_requirements\": [], \"date_range\": {\"start\": null, \"end\": null}, \"confidence\": 85}\n\nValid request_type values: specific_order, latest_order, date_range, custom\nValid urgency values: low, normal, high, urgent\nConfidence should be 0-100 integer."
+            },
+            {
+              "type": "HumanMessagePromptTemplate",
+              "message": "=Subject: {{ $json.subject }}\n\nFrom: {{ $json.from }}\n\nBody: {{ $json.text }} "
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -6520,
+        560
+      ],
+      "id": "50a9d8b1-b7a3-4c6b-b692-5b1089556c69",
+      "name": "Enhanced Email Classifier"
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "is:unread (invoice OR receipt OR bill OR order OR missing OR latest OR facture OR commande)"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -6740,
+        560
+      ],
+      "id": "09053222-d383-4920-a6f5-27304022a337",
+      "name": "Enhanced Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iPYFJjrZDd2OtZU9",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced failure analysis and intelligent ticket creation with safe node referencing\ntry {\n  // Safely get data from nodes that may or may not have executed\n  let emailData, classification, customerMatchAttempt;\n  \n  // Try to get email data\n  try {\n    emailData = $('Enhanced Gmail Trigger').first().json;\n  } catch (e) {\n    // Fallback: try to get from current execution context\n    emailData = $input.first()?.json?.email_data || {\n      from: { value: [{ address: 'unknown@example.com', name: 'Unknown Customer' }] },\n      subject: 'Unknown Request',\n      text: 'Email content unavailable'\n    };\n  }\n  \n  // Try to get classification data\n  try {\n    classification = $('Enhanced Email Classifier').first().json;\n  } catch (e) {\n    // Fallback classification\n    classification = {\n      is_invoice_request: true,\n      order_number: null,\n      request_type: 'unknown',\n      urgency: 'normal',\n      confidence: 0\n    };\n  }\n  \n  // Try to get customer matching data\n  try {\n    customerMatchAttempt = $('AI Customer Matching').first()?.json;\n  } catch (e) {\n    // Fallback when customer matching hasn't run\n    customerMatchAttempt = {\n      matched: false,\n      confidence: 0,\n      customer_code: null,\n      reasoning: 'Customer matching not executed'\n    };\n  }\n  \n  // Determine failure type based on available data and execution context\n  let failureType = 'unknown';\n  let failureReason = 'Unknown system error';\n  let suggestedActions = [];\n  let urgencyLevel = classification.urgency || 'normal';\n  \n  // Analyze failure based on current context\n  if (!classification.is_invoice_request) {\n    failureType = 'non_invoice_request';\n    failureReason = 'Request was not classified as an invoice request';\n    suggestedActions = [\n      'Manual review of email content required',\n      'Verify customer intent',\n      'Route to appropriate department'\n    ];\n  } else if (!customerMatchAttempt?.matched) {\n    failureType = 'customer_not_found';\n    failureReason = 'Customer could not be identified in our system';\n    suggestedActions = [\n      'Verify customer email address',\n      'Check if customer is registered',\n      'Manual customer lookup required'\n    ];\n  } else if (classification.order_number && classification.request_type === 'specific_order') {\n    failureType = 'order_not_found';\n    failureReason = `Requested order ${classification.order_number} could not be located`;\n    suggestedActions = [\n      'Verify order number',\n      'Check order status in SAP',\n      'Search alternative order references'\n    ];\n  } else {\n    failureType = 'no_orders_available';\n    failureReason = 'No orders found for this customer';\n    suggestedActions = [\n      'Check customer order history',\n      'Verify customer account status',\n      'Contact customer for clarification'\n    ];\n  }\n  \n  // Create comprehensive ticket data\n  const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15);\n  const ticketId = `SAV-${failureType.toUpperCase()}-${timestamp}`;\n  \n  // Extract customer info safely\n  let customerEmail = 'unknown@example.com';\n  let customerName = 'Unknown Customer';\n  if (emailData.from?.value?.[0]) {\n    customerEmail = emailData.from.value[0].address || customerEmail;\n    customerName = emailData.from.value[0].name || customerName;\n  }\n  \n  const ticketData = {\n    status: 'failure_analysis_complete',\n    ticket_id: ticketId,\n    failure_type: failureType,\n    failure_reason: failureReason,\n    suggested_actions: suggestedActions,\n    title: `AUTOMATED FAILURE - ${failureType.replace(/_/g, ' ').toUpperCase()}`,\n    description: `Automated workflow failed to process customer request.\\n\\nFailure Details:\\n- Type: ${failureType}\\n- Reason: ${failureReason}\\n- Customer: ${customerName} (${customerEmail})\\n- Original Request: ${emailData.subject || 'Unknown'}\\n- Classification Confidence: ${classification.confidence || 0}%\\n- Urgency: ${urgencyLevel}\\n\\nSuggested Actions:\\n${suggestedActions.map(action => `- ${action}`).join('\\n')}\\n\\nOriginal Email Content:\\n${emailData.text || 'Content unavailable'}`,\n    customer_email: customerEmail,\n    customer_name: customerName,\n    original_subject: emailData.subject || 'Unknown Request',\n    priority: urgencyLevel === 'urgent' ? 'high' : urgencyLevel === 'high' ? 'medium' : 'low',\n    category: 'automated_failure',\n    classification: classification,\n    customer_match_attempt: customerMatchAttempt,\n    created_at: new Date().toISOString(),\n    requires_human_intervention: true,\n    estimated_resolution: urgencyLevel === 'urgent' ? '2 hours' : urgencyLevel === 'high' ? '4 hours' : '24 hours',\n    escalation_required: urgencyLevel === 'urgent',\n    execution_context: {\n      email_data_available: !!emailData,\n      classification_available: !!classification,\n      customer_match_available: !!customerMatchAttempt\n    }\n  };\n  \n  return [{ json: ticketData }];\n  \n} catch (error) {\n  // Ultimate fallback for any unexpected errors\n  const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15);\n  const fallbackTicket = {\n    status: 'critical_failure',\n    ticket_id: `SAV-CRITICAL-${timestamp}`,\n    failure_type: 'system_error',\n    failure_reason: `Critical system error: ${error.message}`,\n    suggested_actions: [\n      'Immediate technical investigation required',\n      'Check workflow configuration',\n      'Review error logs'\n    ],\n    title: 'CRITICAL - WORKFLOW SYSTEM ERROR',\n    description: `Critical failure in automated workflow.\\n\\nError Details:\\n- Message: ${error.message}\\n- Timestamp: ${new Date().toISOString()}\\n\\nImmediate attention required.`,\n    customer_email: 'unknown@example.com',\n    customer_name: 'Unknown Customer',\n    original_subject: 'System Error',\n    priority: 'high',\n    category: 'system_error',\n    classification: null,\n    customer_match_attempt: null,\n    created_at: new Date().toISOString(),\n    requires_human_intervention: true,\n    estimated_resolution: '1 hour',\n    escalation_required: true\n  };\n  \n  return [{ json: fallbackTicket }];\n}"
+      },
+      "id": "c251709b-414b-416b-a035-62f5afb7b232",
+      "name": "Function - Analyze Failure & Create Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1660,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Failure Type: {{ $json.failure_type }}\nCustomer: {{ $json.customer_name }} ({{ $json.customer_email }})\nOriginal Request: {{ $json.original_subject }}\nFailure Reason: {{ $json.failure_reason }}\nSuggested Actions: {{ $json.suggested_actions.join(', ') }}\nTicket ID: {{ $json.ticket_id }}\nUrgency: {{ $json.priority }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an expert customer service email composer specializing in failure notifications. Create a professional, empathetic, and solution-oriented email to inform the customer that their automated request could not be processed.\n\nKey requirements:\n1. Acknowledge the request and apologize for the inconvenience\n2. Briefly explain what went wrong (without technical jargon)\n3. Provide clear next steps for resolution\n4. Include ticket reference for follow-up\n5. Set realistic expectations for human support\n6. Maintain professional yet warm tone\n7. Offer alternative contact methods if urgent\n\nReturn JSON: {\n  \"subject\": \"Professional subject line\",\n  \"body_html\": \"Complete HTML email body with proper formatting\",\n  \"body_text\": \"Plain text version\",\n  \"priority\": \"normal|high|urgent\",\n  \"follow_up_hours\": \"expected response time in hours\"\n}"
+            },
+            {
+              "type": "HumanMessagePromptTemplate",
+              "message": "Failure Analysis:\\nType: {{ $json.failure_type }}\\nCustomer: {{ $json.customer_name }} ({{ $json.customer_email }})\\nOriginal Request: {{ $json.original_subject }}\\nReason: {{ $json.failure_reason }}\\nActions Needed: {{ $json.suggested_actions.join(', ') }}\\nTicket: {{ $json.ticket_id }}\\nUrgency: {{ $json.priority }}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -1360,
+        800
+      ],
+      "id": "df64a245-37f8-4b77-8391-7cdec1bc2677",
+      "name": "AI Failure Email Composer"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Function - Analyze Failure & Create Ticket').item.json.customer_email }}",
+        "subject": "={{ $('Function - Analyze Failure & Create Ticket').item.json.title }}",
+        "message": "={{ $('Function - Analyze Failure & Create Ticket').item.json.description }}",
+        "options": {
+          "replyToSenderOnly": true
+        }
+      },
+      "id": "d1a0113c-b909-44f1-8851-d978ec5a0851",
+      "name": "Gmail - Send Failure Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        800
+      ],
+      "webhookId": "98b9b521-d574-4bf3-8f02-c7f243067f37",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "iPYFJjrZDd2OtZU9",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced SAV ticket creation with comprehensive data for support team\nconst ticketData = $('Function - Analyze Failure & Create Ticket').item.json;\nconst emailResponse = $json;\nconst originalEmailData = $('Enhanced Gmail Trigger').first().json;\n\n// Create detailed support ticket for internal team\nconst supportTicket = {\n  ...ticketData,\n  internal_notes: {\n    automated_response_sent: true,\n    response_email_subject: emailResponse.subject,\n    customer_notified_at: new Date().toISOString(),\n    follow_up_required_by: new Date(Date.now() + (parseInt(emailResponse.follow_up_hours || 24) * 60 * 60 * 1000)).toISOString(),\n    workflow_failure_point: ticketData.failure_type,\n    original_email_id: originalEmailData.id,\n    thread_id: originalEmailData.threadId\n  },\n  support_actions: {\n    immediate_actions: ticketData.suggested_actions,\n    escalation_criteria: [\n      'Customer responds with urgency',\n      'Technical issue requires IT intervention',\n      'Missing data requires manual research'\n    ],\n    knowledge_base_links: [\n      'Customer Lookup Procedures',\n      'Order Status Investigation',\n      'Invoice Generation Troubleshooting'\n    ]\n  },\n  customer_context: {\n    previous_requests: 'To be researched',\n    account_status: 'To be verified',\n    preferred_communication: 'Email (inferred)',\n    language_preference: 'Auto-detected from email'\n  }\n};\n\n// Log the complete failure analysis for monitoring\nconsole.log(`SAV Ticket Created: ${supportTicket.ticket_id}`);\nconsole.log(`Failure Type: ${supportTicket.failure_type}`);\nconsole.log(`Customer Notified: ${supportTicket.internal_notes.customer_notified_at}`);\n\nreturn [{ json: supportTicket }];"
+      },
+      "id": "bdf16e72-a632-4025-957c-48cd8020e483",
+      "name": "Function - Create Support Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -780,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1i2SJ7ffkHoiyG_VjuUHM4mwnrZaMuDQixZ_E-KL8_Ws",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1i2SJ7ffkHoiyG_VjuUHM4mwnrZaMuDQixZ_E-KL8_Ws/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "ticket_id",
+              "lookupValue": "={{ $json.ticket_id }}"
+            },
+            {
+              "lookupColumn": "created_at",
+              "lookupValue": "={{ $json.created_at }}"
+            },
+            {
+              "lookupColumn": "status",
+              "lookupValue": "={{ $json.status }}"
+            },
+            {
+              "lookupColumn": "priority",
+              "lookupValue": "={{ $json.priority }}"
+            },
+            {
+              "lookupColumn": "failure_type",
+              "lookupValue": "={{ $json.failure_type }}"
+            },
+            {
+              "lookupColumn": "customer_name",
+              "lookupValue": "={{ $json.customer_name }}"
+            },
+            {
+              "lookupColumn": "failure_type",
+              "lookupValue": "={{ $json.failure_type }}"
+            },
+            {
+              "lookupColumn": "customer_email",
+              "lookupValue": "={{ $json.customer_email }}"
+            },
+            {
+              "lookupColumn": "original_subject",
+              "lookupValue": "={{ $json.original_subject }}"
+            },
+            {
+              "lookupColumn": "failure_reason",
+              "lookupValue": "={{ $json.failure_reason }}"
+            },
+            {
+              "lookupColumn": "suggested_actions",
+              "lookupValue": "={{ $json.suggested_actions }}"
+            },
+            {
+              "lookupColumn": "estimated_resolution",
+              "lookupValue": "={{ $json.estimated_resolution }}"
+            },
+            {
+              "lookupColumn": "escalation_required",
+              "lookupValue": "={{ $json.escalation_required }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1a62cdd-6d2c-483d-8c98-b7be89d367b8",
+      "name": "Google Sheets - Store Support Ticket",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        -480,
+        800
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "9mZv0QhOSobDWNEA",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pure email-based customer matching - IGNORE NAMES COMPLETELY\nconst businessPartnersResponse = $json; // From SAP B1 - Search Business Partners\nconst sessionData = $('Merge Session Data').first().json;\n\nconsole.log(\"=== EMAIL-ONLY CUSTOMER MATCHING ===\");\nconsole.log(\"Searching for email:\", sessionData.$json.customer_info.email);\nconsole.log(\"Original sender name (IGNORED):\", sessionData.$json.customer_info.name);\n\n// Initialize match result\nlet customerMatch = {\n  matched: false,\n  confidence: 0,\n  customer_code: null,\n  customer_name: null,\n  customer_email: null,\n  reasoning: \"No business partners found\"\n};\n\n// Check if we have business partners data\nif (businessPartnersResponse && businessPartnersResponse.value && businessPartnersResponse.value.length > 0) {\n  console.log(\"Business Partners found:\", businessPartnersResponse.value.length);\n  \n  // Get sender email (clean it)\n  const senderEmail = sessionData.$json.customer_info.email.toLowerCase().trim().replace(/[<>]/g, '');\n  console.log(\"Cleaned sender email:\", senderEmail);\n  \n  // Log all business partners for debugging\n  console.log(\"All Business Partners in SAP:\");\n  businessPartnersResponse.value.forEach((partner, index) => {\n    const partnerEmail = partner.EmailAddress ? partner.EmailAddress.toLowerCase().trim() : 'NO EMAIL';\n    console.log(`  ${index + 1}. ${partner.CardCode} | ${partner.CardName} | ${partnerEmail}`);\n  });\n  \n  // Find EXACT email match - IGNORE NAMES COMPLETELY\n  const matchedPartner = businessPartnersResponse.value.find(partner => {\n    if (!partner.EmailAddress) {\n      console.log(`Skipping ${partner.CardCode} - no email address`);\n      return false;\n    }\n    \n    const partnerEmail = partner.EmailAddress.toLowerCase().trim().replace(/[<>]/g, '');\n    const isMatch = partnerEmail === senderEmail;\n    \n    console.log(`Comparing: \"${partnerEmail}\" === \"${senderEmail}\" = ${isMatch}`);\n    \n    return isMatch;\n  });\n  \n  if (matchedPartner) {\n    // MATCH FOUND - USE SAP DATA\n    customerMatch = {\n      matched: true,\n      confidence: 100,\n      customer_code: matchedPartner.CardCode,\n      customer_name: matchedPartner.CardName, // Use SAP business name, not email name\n      customer_email: matchedPartner.EmailAddress,\n      reasoning: `Email match found: ${senderEmail} → SAP Customer: ${matchedPartner.CardName} (${matchedPartner.CardCode})`\n    };\n    \n    console.log(\"✅ CUSTOMER MATCH FOUND!\");\n    console.log(\"  Email Sender:\", sessionData.$json.customer_info.name, `(${senderEmail})`);\n    console.log(\"  SAP Customer:\", matchedPartner.CardName, `(${matchedPartner.CardCode})`);\n    console.log(\"  Email Match:\", matchedPartner.EmailAddress);\n    console.log(\"  → Using SAP business name, ignoring email sender name\");\n    \n  } else {\n    customerMatch.reasoning = `No email match found for ${senderEmail}`;\n    console.log(\"❌ NO MATCH FOUND\");\n    console.log(\"Available emails in SAP:\");\n    businessPartnersResponse.value.forEach(partner => {\n      if (partner.EmailAddress) {\n        console.log(`  - ${partner.EmailAddress} (${partner.CardName})`);\n      }\n    });\n  }\n} else {\n  console.log(\"❌ No business partners found in SAP response\");\n  console.log(\"SAP Response:\", JSON.stringify(businessPartnersResponse, null, 2));\n}\n\nconsole.log(\"Final customer match result:\", customerMatch);\n\nreturn [{\n  json: {\n    ...sessionData,\n    customer_match: customerMatch\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3940,
+        480
+      ],
+      "id": "eab3e38c-64b5-46e1-a7e4-5295d7e74e7f",
+      "name": "Email-Only Customer Matching"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatMistralCloud",
+      "typeVersion": 1,
+      "position": [
+        -1660,
+        1340
+      ],
+      "id": "21c6ba88-4ec7-41f8-baac-dc1a8af7ef3f",
+      "name": "Mistral Cloud Chat Model",
+      "credentials": {
+        "mistralCloudApi": {
+          "id": "BsdGvsY2oNd2RK1I",
+          "name": "Mistral Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "13d1b2e6-2400-4ff8-bb98-8d4a2a8ff0e4",
+              "name": "batchSize",
+              "value": 20,
+              "type": "number"
+            },
+            {
+              "id": "e2784ce7-ad01-4971-96ea-fc0a9c24b0fd",
+              "name": "currentSkip",
+              "value": 0,
+              "type": "number"
+            },
+            {
+              "id": "d21f5ccd-ff0e-4eac-b29f-d371aa35253c",
+              "name": "baseEntry",
+              "value": "={{ $('IF - Orders Found').item.json.value[0].DocEntry }}",
+              "type": "string"
+            },
+            {
+              "id": "e5eee189-1ee3-47a1-9ca0-3b34d3695e6c",
+              "name": "baseType",
+              "value": 17,
+              "type": "number"
+            },
+            {
+              "id": "37e6d413-c31d-4fcb-92d0-b1b7a48511c1",
+              "name": "matchingInvoices",
+              "value": "[]",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1480,
+        420
+      ],
+      "id": "8d78475b-fed6-4c78-a91c-8f37c613f344",
+      "name": "Set Batch Variables"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced Code1 node - Better JSON parsing\nconst classifierOutput = $input.first().json;\nlet cleanJsonText = classifierOutput.text;\n\nconsole.log(\"Original text:\", cleanJsonText);\n\n// Clean the malformed JSON - INCLUDING escaped underscores\ncleanJsonText = cleanJsonText\n  .replace(/\\\\n/g, '')     // Remove escaped newlines\n  .replace(/\\n/g, '')      // Remove actual newlines\n  .replace(/\\s+/g, ' ')    // Replace multiple spaces with single space\n  .replace(/\\\\_/g, '_')    // 🔥 FIX: Remove escaped underscores\n  .trim();                 // Remove leading/trailing whitespace\n\nconsole.log(\"Cleaned text:\", cleanJsonText);\n\ntry {\n  // Parse the cleaned JSON\n  const parsedClassification = JSON.parse(cleanJsonText);\n  \n  console.log(\"✅ Successfully parsed classification:\", parsedClassification);\n  console.log(\"Order number from parsed:\", parsedClassification.order_number);\n  \n  // Return the cleaned data with PARSED classification AS AN OBJECT\n  return [{\n    json: {\n      ...classifierOutput,\n      classification: parsedClassification,  // This is now a proper object\n      raw_classification_text: cleanJsonText // Keep original for debugging\n    }\n  }];\n} catch (error) {\n  console.log(\"❌ JSON parsing error:\", error.message);\n  console.log(\"Raw text:\", classifierOutput.text);\n  console.log(\"Cleaned text:\", cleanJsonText);\n  \n  // Return with parsing error flag\n  return [{\n    json: {\n      ...classifierOutput,\n      classification: {\n        is_invoice_request: false,\n        error: \"JSON parsing failed\",\n        raw_text: classifierOutput.text,\n        cleaned_text: cleanJsonText\n      }\n    }\n  }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6140,
+        560
+      ],
+      "id": "2a4c132c-7d30-4ef0-b8af-fa0390b886d1",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "url": "https://172.16.0.217:50000/b1s/v1/Invoices",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "$select",
+              "value": "DocEntry,DocNum,CardCode,DocDate,DocTotal,DocumentStatus"
+            },
+            {
+              "name": "$top",
+              "value": "={{ $json.batchSize }}"
+            },
+            {
+              "name": "$skip",
+              "value": "={{ $json.currentSkip }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{ $('SAP B1 - Refresh Login2').item.json.headers['set-cookie'][0] }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1300,
+        420
+      ],
+      "id": "b66908f5-2588-4f6a-add7-5289b17a54bb",
+      "name": "Get Invoice Batch"
+    },
+    {
+      "parameters": {
+        "url": "=https://172.16.0.217:50000/b1s/v1/Invoices({{ $json.value.DocEntry }})",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "$select",
+              "value": "DocEntry,DocNum,CardCode,DocDate,DocTotal,DocumentLines"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{ $('SAP B1 - Refresh Login2').item.json.headers['set-cookie'][0] }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -960,
+        380
+      ],
+      "id": "f7257bc8-ad66-4448-90d9-3b138fb37f27",
+      "name": "Get Invoice Lines"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if this invoice has matching document lines\nconst invoice = $input.first().json;\nconst invoiceResponse = $input.last().json; // Full invoice object now\nconst batchData = $('Set Batch Variables').item.json;\n\n// Access DocumentLines from the full invoice response\nconst documentLines = invoiceResponse.DocumentLines || [];\n\n// Check if any line matches our criteria\nconst hasMatchingLine = documentLines.some(line => \n  line.BaseEntry === batchData.baseEntry && line.BaseType === batchData.baseType\n);\n\nif (hasMatchingLine) {\n  // Filter to get only matching lines\n  const matchingLines = documentLines.filter(line => \n    line.BaseEntry === batchData.baseEntry && line.BaseType === batchData.baseType\n  );\n  \n  return [{\n    json: {\n      ...invoice,\n      DocumentLines: matchingLines,\n      isMatch: true\n    }\n  }];\n} else {\n  return [{\n    json: {\n      isMatch: false\n    }\n  }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        380
+      ],
+      "id": "6e520a60-6cb7-49a1-a0fa-4a6d25f99312",
+      "name": "Check Line Match"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "651efb47-95af-495e-8d76-0c5df79ce0d7",
+              "leftValue": "={{ $json.isMatch }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -560,
+        380
+      ],
+      "id": "202e9d8c-f831-47c2-94fd-108e5c43362a",
+      "name": "Filter Matches Only"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all matching invoices from this batch\nconst allItems = $input.all();\nconst matchingInvoices = allItems.map(item => item.json).filter(item => item.isMatch);\nconst batchData = $('Set Batch Variables').first().json;\nconst currentBatch = $('Get Invoice Batch').first().json;\n\n// Calculate if we need more batches\nconst currentBatchSize = currentBatch.value?.length || 0;\nconst hasMoreRecords = currentBatchSize === batchData.batchSize;\nconst foundMatch = matchingInvoices.length > 0;\n\nreturn [{\n  json: {\n    matchingInvoices: matchingInvoices,\n    currentSkip: batchData.currentSkip + batchData.batchSize,\n    batchSize: batchData.batchSize,\n    baseEntry: batchData.baseEntry,\n    baseType: batchData.baseType,\n    hasMoreRecords: hasMoreRecords,\n    foundMatch: foundMatch,\n    shouldContinue: hasMoreRecords && !foundMatch\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        340
+      ],
+      "id": "a646ad3c-2d44-43e7-9f57-a95df2f242a1",
+      "name": "Aggregate Results"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "22bc49fb-4368-4d4c-b4cc-a1510cd8c30e",
+              "leftValue": "= ={{ $json.shouldContinue }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        40,
+        340
+      ],
+      "id": "dcc6c69f-ec43-455e-bec1-556391a9d0e2",
+      "name": "Check Continue Processing"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"parameters\": {\n    \"assignments\": {\n      \"assignments\": [\n        {\n          \"id\": \"baseEntry\",\n          \"name\": \"baseEntry\", \n          \"value\": \"={{ $json.baseEntry }}\",\n          \"type\": \"number\"\n        },\n        {\n          \"id\": \"baseType\",\n          \"name\": \"baseType\",\n          \"value\": \"={{ $json.baseType }}\",\n          \"type\": \"number\"\n        },\n        {\n          \"id\": \"batchSize\", \n          \"name\": \"batchSize\",\n          \"value\": \"={{ $json.batchSize }}\",\n          \"type\": \"number\"\n        },\n        {\n          \"id\": \"currentSkip\",\n          \"name\": \"currentSkip\", \n          \"value\": \"={{ $json.currentSkip }}\",\n          \"type\": \"number\"\n        },\n        {\n          \"id\": \"matchingInvoices\",\n          \"name\": \"matchingInvoices\",\n          \"value\": \"={{ $json.matchingInvoices }}\",\n          \"type\": \"array\"\n        }\n      ]\n    }\n  }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        420,
+        180
+      ],
+      "id": "1702252d-f96b-4e93-b594-ac88fd6c303a",
+      "name": "Update Batch Variables (for loop)"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "value",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        400
+      ],
+      "id": "7a244d76-d85e-48d1-9297-2809c78f324f",
+      "name": "Split Invoice List"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PROBLEM: Code2 node is placed AFTER \"IF - Customer Found\" \n// but it needs data from BEFORE the customer matching process\n\n// CURRENT WRONG FLOW:\n// Enhanced Gmail Trigger → Enhanced Email Classifier → Code1 → IF - Check Invoice Request \n//   → ... customer matching process ... → IF - Customer Found → Code2 ❌ (WRONG POSITION)\n\n// CORRECT FLOW SHOULD BE:\n// Enhanced Gmail Trigger → Enhanced Email Classifier → Code1 → IF - Check Invoice Request \n//   → ... customer matching process ... → IF - Customer Found → Code2 (FIXED POSITION)\n\n// SOLUTION 1: Fix the Code2 node to properly access the data\n// Replace your current Code2 node code with this:\n\nconsole.log(\"=== DEBUGGING UNDEFINED VALUES ===\");\n\n// Get the input data from the current node\nconst inputData = $input.first().json;\nconsole.log(\"1. Raw input data:\", JSON.stringify(inputData, null, 2));\n\n// The data structure at this point should contain everything from previous nodes\n// Check if we have customer_match data (this should exist)\nconsole.log(\"2. Customer match exists:\", !!inputData.customer_match);\nconsole.log(\"3. Customer match data:\", inputData.customer_match);\n\n// Check for classification data - it might be nested differently at this point\nlet classification = null;\n\n// Try different possible locations for classification data\nif (inputData.classification) {\n    classification = inputData.classification;\n    console.log(\"4. Found classification at root level\");\n} else if (inputData.$json && inputData.$json.classification) {\n    classification = inputData.$json.classification;\n    console.log(\"4. Found classification at $json level\");\n} else {\n    // Try to get it from the original email processing\n    try {\n        const emailClassifierData = $('Code1').first().json;\n        classification = emailClassifierData.classification;\n        console.log(\"4. Retrieved classification from Code1 node\");\n    } catch (e) {\n        console.log(\"4. ❌ Could not find classification data anywhere\");\n    }\n}\n\nif (classification) {\n    console.log(\"5. Order number:\", classification.order_number);\n    console.log(\"6. Order number type:\", typeof classification.order_number);\n    console.log(\"7. Request type:\", classification.request_type);\n    console.log(\"8. Is invoice request:\", classification.is_invoice_request);\n    console.log(\"9. All classification keys:\", Object.keys(classification));\n} else {\n    console.log(\"5. ❌ Classification is null or undefined\");\n}\n\n// Return the properly structured data for the next node\nreturn [{\n    json: {\n        ...inputData,\n        classification: classification, // Ensure classification is available\n        debug_info: {\n            node_position: \"after_customer_found\",\n            classification_source: classification ? \"found\" : \"missing\",\n            available_keys: Object.keys(inputData)\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3280,
+        380
+      ],
+      "id": "c7ada47f-5e95-40f8-9f66-bb704bb846ed",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "af45b68c-486a-4d79-b03d-e5f2e1657902",
+              "leftValue": "={{ $json.has_specific_order }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2840,
+        380
+      ],
+      "id": "e02a7562-2aa6-4e31-b74c-17d2f84800f0",
+      "name": "IF - Check Order Type"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FIXED: Prepare Order Check Data - Handles escaped underscores\nconst inputData = $input.first().json;\n\nconsole.log(\"=== PREPARING ORDER CHECK DATA ===\");\nconsole.log(\"Input data structure:\", JSON.stringify(inputData, null, 2));\n\n// Try to get classification data from multiple sources\nlet classification = null;\nlet orderNumber = null;\n\n// Method 1: Check current input for classification\nif (inputData.classification) {\n    classification = inputData.classification;\n    console.log(\"✅ Found classification in current input\");\n    console.log(\"Raw classification:\", classification);\n    \n    // Handle both normal and escaped underscores\n    if (classification.order_number !== undefined) {\n        orderNumber = classification.order_number;\n        console.log(\"Found order_number (normal):\", orderNumber);\n    } else if (classification[\"order\\\\_number\"] !== undefined) {\n        orderNumber = classification[\"order\\\\_number\"];\n        console.log(\"Found order\\\\_number (escaped):\", orderNumber);\n    }\n}\n// Method 2: Check nested structure\nelse if (inputData.$json && inputData.$json.classification) {\n    classification = inputData.$json.classification;\n    console.log(\"✅ Found classification in nested $json\");\n    \n    // Handle both normal and escaped underscores\n    if (classification.order_number !== undefined) {\n        orderNumber = classification.order_number;\n    } else if (classification[\"order\\\\_number\"] !== undefined) {\n        orderNumber = classification[\"order\\\\_number\"];\n    }\n}\n// Method 3: Try to get from Code1 node (this should have parsed classification)\nelse {\n    try {\n        const code1Result = $('Code1').first().json;\n        if (code1Result.classification) {\n            classification = code1Result.classification;\n            console.log(\"✅ Retrieved classification from Code1 node\");\n            \n            // Handle both normal and escaped underscores\n            if (classification.order_number !== undefined) {\n                orderNumber = classification.order_number;\n            } else if (classification[\"order\\\\_number\"] !== undefined) {\n                orderNumber = classification[\"order\\\\_number\"];\n            }\n        }\n    } catch (e) {\n        console.log(\"❌ Could not access Code1:\", e.message);\n    }\n}\n\n// If we still don't have classification, try raw text parsing\nif (!classification && inputData.classification && inputData.classification.text) {\n    try {\n        console.log(\"Trying to parse classification text:\", inputData.classification.text);\n        const parsedClassification = JSON.parse(inputData.classification.text);\n        classification = parsedClassification;\n        \n        // Handle both normal and escaped underscores\n        if (parsedClassification.order_number !== undefined) {\n            orderNumber = parsedClassification.order_number;\n        } else if (parsedClassification[\"order\\\\_number\"] !== undefined) {\n            orderNumber = parsedClassification[\"order\\\\_number\"];\n        }\n        console.log(\"✅ Successfully parsed classification text\");\n    } catch (e) {\n        console.log(\"❌ Could not parse classification text:\", e.message);\n    }\n}\n\nconsole.log(\"Final classification:\", classification);\nconsole.log(\"Final order number:\", orderNumber);\nconsole.log(\"Order number type:\", typeof orderNumber);\nconsole.log(\"Has order number:\", !!orderNumber);\n\n// Check if order number is valid (not null, not empty string)\nconst hasValidOrderNumber = !!(orderNumber && orderNumber !== null && orderNumber !== \"\" && orderNumber !== \"null\");\n\nconsole.log(\"Has valid order number:\", hasValidOrderNumber);\nconsole.log(\"Order number value:\", orderNumber);\n\n// Return structured data with order_number at root level for easy access\nreturn [{\n    json: {\n        ...inputData,\n        order_number: orderNumber,\n        classification: classification,\n        has_order_number: hasValidOrderNumber,\n        has_specific_order: hasValidOrderNumber,\n        debug_info: {\n            classification_found: !!classification,\n            order_number_value: orderNumber,\n            order_number_source: classification && classification.order_number !== undefined ? \"order_number\" : \"order\\\\_number\",\n            ready_for_order_check: !!(hasValidOrderNumber && inputData.customer_match?.matched),\n            raw_classification: inputData.classification\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3060,
+        380
+      ],
+      "id": "b1fcd1eb-8696-4c7f-9bb2-b75fe8190b38",
+      "name": "Prepare Order Check Data"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Enhanced Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Email Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Email Classifier": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Check Invoice Request": {
+      "main": [
+        [
+          {
+            "node": "SAP B1 - Login",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Function - Analyze Failure & Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SAP B1 - Login": {
+      "main": [
+        [
+          {
+            "node": "Function - Prepare Customer Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Prepare Customer Search": {
+      "main": [
+        [
+          {
+            "node": "Function - Check Session Validity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Check Session Validity": {
+      "main": [
+        [
+          {
+            "node": "IF - Need Session Refresh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Need Session Refresh": {
+      "main": [
+        [
+          {
+            "node": "SAP B1 - Refresh Login",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Session Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "SAP B1 - Refresh Login": {
+      "main": [
+        [
+          {
+            "node": "Function - Update Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Update Session Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Session Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Session Data": {
+      "main": [
+        [
+          {
+            "node": "SAP B1 - Search Business Partners",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SAP B1 - Search Business Partners": {
+      "main": [
+        [
+          {
+            "node": "Email-Only Customer Matching",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "IF - Customer Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Customer Found": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Function - Analyze Failure & Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SAP B1 - Get Specific Order": {
+      "main": [
+        [
+          {
+            "node": "Merge Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SAP B1 - Refresh Login1": {
+      "main": [
+        [
+          {
+            "node": "Get Latest Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Latest Order": {
+      "main": [
+        [
+          {
+            "node": "Merge Orders",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Orders": {
+      "main": [
+        [
+          {
+            "node": "IF - Orders Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Orders Found": {
+      "main": [
+        [
+          {
+            "node": "SAP B1 - Refresh Login2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Function - Analyze Failure & Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SAP B1 - Refresh Login2": {
+      "main": [
+        [
+          {
+            "node": "Set Batch Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Check Invoice Available": {
+      "main": [
+        [
+          {
+            "node": "AI Document Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Function - Analyze Failure & Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Document Strategy": {
+      "main": [
+        [
+          {
+            "node": "IF - Need to Create Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Need to Create Invoice": {
+      "main": [
+        [
+          {
+            "node": "SAP B1 - Create Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Function - Generate Dynamic Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SAP B1 - Create Invoice": {
+      "main": [
+        [
+          {
+            "node": "Function - Generate Dynamic Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Generate Dynamic Report": {
+      "main": [
+        [
+          {
+            "node": "AI Email Composer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Email Composer": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Send Dynamic Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Analyze Failure & Create Ticket": {
+      "main": [
+        [
+          {
+            "node": "AI Failure Email Composer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Failure Email Composer": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Send Failure Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Send Failure Notification": {
+      "main": [
+        [
+          {
+            "node": "Function - Create Support Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Function - Create Support Ticket": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Store Support Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email-Only Customer Matching": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mistral Cloud Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Failure Email Composer",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "AI Email Composer",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Enhanced Email Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "AI Document Strategy",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "IF - Check Invoice Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Batch Variables": {
+      "main": [
+        [
+          {
+            "node": "Get Invoice Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Invoice Batch": {
+      "main": [
+        [
+          {
+            "node": "Split Invoice List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Invoice Lines": {
+      "main": [
+        [
+          {
+            "node": "Check Line Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Line Match": {
+      "main": [
+        [
+          {
+            "node": "Filter Matches Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Matches Only": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Check Continue Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Continue Processing": {
+      "main": [
+        [
+          {
+            "node": "Update Batch Variables (for loop)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF - Check Invoice Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Invoice List": {
+      "main": [
+        [
+          {
+            "node": "Get Invoice Lines",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Batch Variables (for loop)": {
+      "main": [
+        [
+          {
+            "node": "Get Invoice Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Prepare Order Check Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Check Order Type": {
+      "main": [
+        [
+          {
+            "node": "SAP B1 - Get Specific Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SAP B1 - Refresh Login1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Order Check Data": {
+      "main": [
+        [
+          {
+            "node": "IF - Check Order Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8984dbe0-30b4-402a-b7c6-8a0d9e95bed8",
+  "meta": {
+    "instanceId": "12da1bdeb50ae8e22ff99054576a62be5943753375212fcdbef4126228e16747"
+  },
+  "id": "E99NZwWl7wxSEAX3",
+  "tags": [
+    {
+      "createdAt": "2025-06-24T13:46:54.953Z",
+      "updatedAt": "2025-06-24T13:46:54.953Z",
+      "id": "VOn5NsZmixlO5urY",
+      "name": "pfe"
+    }
+  ]
+}
