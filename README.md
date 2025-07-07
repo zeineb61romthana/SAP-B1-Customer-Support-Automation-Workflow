@@ -1,7 +1,5 @@
 # SAP B1 Customer Support Automation Workflow 🚀
 
-![SAP B1 Automation Banner](https://via.placeholder.com/1200x200.png?text=SAP+B1+Customer+Support+Automation)
-
 Welcome to the **SAP B1 Customer Support Automation Workflow**, a powerful n8n-based solution that streamlines customer support for SAP Business One (SAP B1). This project automates the processing of customer emails, integrates with SAP B1’s OData API, generates reports, and manages support tickets, saving time and reducing manual effort.
 
 ## 🌟 Project Overview
